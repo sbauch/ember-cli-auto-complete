@@ -1,6 +1,5 @@
 import Ember from "ember";
 import KeyCodes from '../utilities/key-codes';
-const { get, set } = Ember;
 
 var focusOutEvent;
 
@@ -30,31 +29,26 @@ export default Ember.Component.extend({
   layoutName: "components/auto-complete",
   highlightIndex: -1,
   visibility: HIDDEN,
-  hideWhenNoSuggestions: false,
   inputClass: '',
   inputClazz: Ember.computed(function () {
     return "typeahead text-input " + this.get('inputClass');
   }),
-  suggestions: [],
-  optionsToMatch: function() {
-    return this.get("options");
-  },
   keyUp: function (event) {
     if (KeyCodes.keyPressed(event) === "escape") {
       this.set("visibility", HIDDEN);
     } else if (!KeyCodes.isEscapedCode(event)) {
       this.set("highlightIndex", -1);
       this.get("options").forEach(function (item) {
-        set(item, "highlight", false);
+        item.set("highlight", false);
       });
+      this.set("visibility", VISIBLE);
       this.set("inputVal", Ember.$(event.target).val());
-      this.setVisible();
     }
     keepHighlightInView(event);
   },
   focusIn: function () {
     if (this.get("visibility") === HIDDEN) {
-      this.setVisible();
+      this.set("visibility", VISIBLE);
     }
   },
   focusOut: function () {
@@ -65,9 +59,13 @@ export default Ember.Component.extend({
         return;
       }
       self.set("visibility", HIDDEN);
-      if (!self.get("selectedFromList") && !self.hasInputMatchingSuggestion()) {
-        self.set("inputVal", "");
-        self.set("selectedValue", "");
+      if (!self.get("selectedFromList")) {
+        var value = this.get("selectedValue");
+        var optionsToMatch = this.get("optionsToMatch");
+        if (optionsToMatch.indexOf(value) === -1) {
+          self.set("inputVal", "");
+          self.set("selectedValue", "");
+        }
       }
     };
     focusOutEvent = Ember.run.later(this, func, 200);
@@ -79,57 +77,43 @@ export default Ember.Component.extend({
       } else if (KeyCodes.keyPressed(event) === "upArrow") {
         this.highlight("up");
       } else if (KeyCodes.keyPressed(event) === "enter" || KeyCodes.keyPressed(event) === "tab") {
+        event.preventDefault()
         if (!Ember.isBlank(this.selectableSuggestion)) {
           this.send("selectItem", this.selectableSuggestion);
           this.set("visibility", HIDDEN);
-        } else if (this.hasInputMatchingSuggestion()) {
-          this.set("selectedFromList", true);
-          this.set("visibility", HIDDEN);
+        } else {
+          var value = this.get("selectedValue");
+          var optionsToMatch = this.get("optionsToMatch");
+          if (optionsToMatch.indexOf(value) >= 0) {
+            this.set("selectedFromList", true);
+            this.set("visibility", HIDDEN);
+          }
         }
       }
     } else {
-      this.setVisible();
+      this.set("visibility", VISIBLE);
     }
   },
-
-  onInput: Ember.observer('selectedValue', function() {
-    var options = this.get("options");
-    var input = this.getWithDefault("selectedValue", "");
-    this.set("suggestions", this.determineSuggestions(options, input));
-  }),
 
   highlight: function (direction) {
-    var length = this.get("suggestions").length;
+    var length = this.get("options.length");
     var currentHighlight = this.get("highlightIndex");
     var nextHighlight = getNewHighlightIndex(direction, currentHighlight, length);
-
     if (currentHighlight >= 0) {
-      var suggestion = this.get("suggestions").objectAt(currentHighlight);
-      set(suggestion, "highlight", false);
+      this.get("suggestions").objectAt(currentHighlight).set("highlight", false);
     }
-
+    console.log(nextHighlight)
     var newSelectedItem = this.get("suggestions").objectAt(nextHighlight);
-    set(newSelectedItem, "highlight", true);
+    newSelectedItem.set("highlight", true);
     this.set("selectableSuggestion", newSelectedItem);
     this.set("highlightIndex", nextHighlight);
-  },
-  hasInputMatchingSuggestion: function() {
-    var suggestions = this.get('suggestions');
-    var input = this.getWithDefault('selectedValue', '').toLowerCase();
-
-    if (suggestions.length !== 1) { return false; }
-
-    return input === get(suggestions[0], this.get('valueProperty')).toLowerCase();
-  },
-  setVisible(){
-    let visible =  !this.get('hideWhenNoSuggestions') || this.get('suggestions').length > 0;
-    this.set('visibility', (visible ? VISIBLE : HIDDEN));
   },
   actions: {
     selectItem: function (item) {
       var valueProperty = this.get("valueProperty");
       this.set("selectedFromList", true);
-      this.set("selectedValue", get(item, valueProperty));
+      this.set("selectedValue", item.get(valueProperty));
+
       this.sendAction('selectItem', item);
     }
   }
